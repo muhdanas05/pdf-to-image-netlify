@@ -1,0 +1,7 @@
+[build]
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  # mupdf ships a .wasm file that esbuild must include verbatim
+  included_files = ["node_modules/mupdf/dist/*.wasm"]

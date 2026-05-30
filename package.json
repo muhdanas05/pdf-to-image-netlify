@@ -1,0 +1,9 @@
+{
+  "name": "pdf-to-image-function",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Netlify function that converts a PDF to PNG images, one per page.",
+  "dependencies": {
+    "mupdf": "^1.3.0"
+  }
+}
