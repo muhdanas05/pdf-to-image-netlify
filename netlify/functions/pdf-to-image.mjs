@@ -1,15 +1,13 @@
-const mupdf = require("mupdf");
+import * as mupdf from "mupdf";
 
-const MAX_PDF_BYTES = 5 * 1024 * 1024; // 5 MB — under Netlify's 6 MB sync body limit
+const MAX_PDF_BYTES = 5 * 1024 * 1024;
 const MAX_PAGES = 100;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 4;
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   try {
-    if (event.httpMethod === "OPTIONS") {
-      return cors(204, "");
-    }
+    if (event.httpMethod === "OPTIONS") return cors(204, "");
     if (event.httpMethod !== "POST") {
       return json(405, { error: "method_not_allowed", message: "Use POST." });
     }
@@ -37,11 +35,7 @@ exports.handler = async (event) => {
       return json(400, { error: "empty_pdf", message: "Decoded PDF is empty." });
     }
     if (buffer.length > MAX_PDF_BYTES) {
-      return json(413, {
-        error: "pdf_too_large",
-        message: `PDF exceeds ${MAX_PDF_BYTES} bytes.`,
-        size: buffer.length,
-      });
+      return json(413, { error: "pdf_too_large", message: `PDF exceeds ${MAX_PDF_BYTES} bytes.`, size: buffer.length });
     }
     if (buffer.slice(0, 4).toString("ascii") !== "%PDF") {
       return json(400, { error: "not_a_pdf", message: "File does not start with %PDF header." });
@@ -76,11 +70,7 @@ exports.handler = async (event) => {
     }
     if (pageCount > MAX_PAGES) {
       safeDestroy(doc);
-      return json(413, {
-        error: "too_many_pages",
-        message: `PDF has ${pageCount} pages; max ${MAX_PAGES}.`,
-        pageCount,
-      });
+      return json(413, { error: "too_many_pages", message: `PDF has ${pageCount} pages; max ${MAX_PAGES}.`, pageCount });
     }
 
     const matrix = mupdf.Matrix.scale(renderScale, renderScale);
@@ -102,7 +92,6 @@ exports.handler = async (event) => {
         safeDestroy(page);
       }
     }
-
     safeDestroy(doc);
 
     const status = failures.length === 0 ? 200 : failures.length === pageCount ? 500 : 207;
@@ -117,18 +106,13 @@ exports.handler = async (event) => {
     });
   } catch (err) {
     console.error("pdf-to-image unhandled error:", err);
-    return json(500, {
-      error: "internal_error",
-      message: "Unexpected failure.",
-      detail: errMsg(err),
-    });
+    return json(500, { error: "internal_error", message: "Unexpected failure.", detail: errMsg(err) });
   }
 };
 
 function json(statusCode, payload) {
   return cors(statusCode, JSON.stringify(payload), { "content-type": "application/json" });
 }
-
 function cors(statusCode, body, extra = {}) {
   return {
     statusCode,
@@ -141,13 +125,11 @@ function cors(statusCode, body, extra = {}) {
     body,
   };
 }
-
 function safeDestroy(obj) {
   if (obj && typeof obj.destroy === "function") {
     try { obj.destroy(); } catch { /* ignore */ }
   }
 }
-
 function errMsg(err) {
   if (!err) return "unknown error";
   if (err instanceof Error) return err.message;
