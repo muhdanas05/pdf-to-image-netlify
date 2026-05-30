@@ -16,24 +16,40 @@ export default async (req) => {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     if (req.method !== "POST") return json(405, { error: "method_not_allowed", message: "Use POST." });
 
-    let body;
-    try {
-      body = await req.json();
-    } catch {
-      return json(400, { error: "invalid_json", message: "Request body is not valid JSON." });
-    }
-
-    const { pdf, scale } = body || {};
-    if (typeof pdf !== "string" || !pdf) {
-      return json(400, { error: "missing_pdf", message: "Body must include 'pdf' as a base64 string." });
-    }
-
+    const url = new URL(req.url);
+    const contentType = (req.headers.get("content-type") || "").toLowerCase();
     let buffer;
-    try {
-      const cleaned = pdf.replace(/^data:application\/pdf;base64,/, "");
-      buffer = Buffer.from(cleaned, "base64");
-    } catch {
-      return json(400, { error: "invalid_base64", message: "Could not decode 'pdf' as base64." });
+    let scale = url.searchParams.get("scale");
+
+    if (contentType.includes("application/pdf") || contentType.includes("application/octet-stream")) {
+      // Raw binary PDF in the body (easiest for n8n: HTTP node -> Body: Binary).
+      try {
+        buffer = Buffer.from(await req.arrayBuffer());
+      } catch (err) {
+        return json(400, { error: "read_body_failed", message: errMsg(err) });
+      }
+    } else {
+      // JSON path: { pdf: "<base64>", scale?: 2 }
+      let body;
+      try {
+        body = await req.json();
+      } catch {
+        return json(400, {
+          error: "invalid_body",
+          message: "Send raw PDF bytes with Content-Type: application/pdf, or JSON { pdf: <base64> }.",
+        });
+      }
+      const { pdf, scale: bodyScale } = body || {};
+      if (typeof pdf !== "string" || !pdf) {
+        return json(400, { error: "missing_pdf", message: "JSON body must include 'pdf' as a base64 string." });
+      }
+      try {
+        const cleaned = pdf.replace(/^data:application\/pdf;base64,/, "");
+        buffer = Buffer.from(cleaned, "base64");
+      } catch {
+        return json(400, { error: "invalid_base64", message: "Could not decode 'pdf' as base64." });
+      }
+      if (bodyScale !== undefined) scale = bodyScale;
     }
     if (buffer.length === 0) return json(400, { error: "empty_pdf", message: "Decoded PDF is empty." });
     if (buffer.length > MAX_PDF_BYTES) {
