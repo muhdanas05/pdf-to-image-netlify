@@ -5,21 +5,25 @@ const MAX_PAGES = 100;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 4;
 
-export const handler = async (event) => {
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-allow-headers": "content-type",
+};
+
+export default async (req) => {
   try {
-    if (event.httpMethod === "OPTIONS") return cors(204, "");
-    if (event.httpMethod !== "POST") {
-      return json(405, { error: "method_not_allowed", message: "Use POST." });
-    }
+    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+    if (req.method !== "POST") return json(405, { error: "method_not_allowed", message: "Use POST." });
 
     let body;
     try {
-      body = JSON.parse(event.body || "{}");
+      body = await req.json();
     } catch {
       return json(400, { error: "invalid_json", message: "Request body is not valid JSON." });
     }
 
-    const { pdf, scale } = body;
+    const { pdf, scale } = body || {};
     if (typeof pdf !== "string" || !pdf) {
       return json(400, { error: "missing_pdf", message: "Body must include 'pdf' as a base64 string." });
     }
@@ -31,9 +35,7 @@ export const handler = async (event) => {
     } catch {
       return json(400, { error: "invalid_base64", message: "Could not decode 'pdf' as base64." });
     }
-    if (buffer.length === 0) {
-      return json(400, { error: "empty_pdf", message: "Decoded PDF is empty." });
-    }
+    if (buffer.length === 0) return json(400, { error: "empty_pdf", message: "Decoded PDF is empty." });
     if (buffer.length > MAX_PDF_BYTES) {
       return json(413, { error: "pdf_too_large", message: `PDF exceeds ${MAX_PDF_BYTES} bytes.`, size: buffer.length });
     }
@@ -49,11 +51,7 @@ export const handler = async (event) => {
     try {
       doc = mupdf.Document.openDocument(buffer, "application/pdf");
     } catch (err) {
-      return json(422, {
-        error: "pdf_open_failed",
-        message: "mupdf could not open the PDF (corrupt or password-protected).",
-        detail: errMsg(err),
-      });
+      return json(422, { error: "pdf_open_failed", message: "mupdf could not open the PDF.", detail: errMsg(err) });
     }
 
     let pageCount;
@@ -110,20 +108,13 @@ export const handler = async (event) => {
   }
 };
 
-function json(statusCode, payload) {
-  return cors(statusCode, JSON.stringify(payload), { "content-type": "application/json" });
-}
-function cors(statusCode, body, extra = {}) {
-  return {
-    statusCode,
-    headers: {
-      "access-control-allow-origin": "*",
-      "access-control-allow-methods": "POST, OPTIONS",
-      "access-control-allow-headers": "content-type",
-      ...extra,
-    },
-    body,
-  };
+export const config = { path: "/pdf-to-image" };
+
+function json(status, payload) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...CORS, "content-type": "application/json" },
+  });
 }
 function safeDestroy(obj) {
   if (obj && typeof obj.destroy === "function") {
